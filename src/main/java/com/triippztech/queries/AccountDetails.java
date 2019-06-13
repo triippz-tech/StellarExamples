@@ -31,6 +31,7 @@ import com.triippztech.utils.Format;
 import com.triippztech.utils.Resolve;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.util.Pair;
 import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.Server;
 import org.stellar.sdk.requests.ErrorResponse;
@@ -82,53 +83,6 @@ public class AccountDetails
     }
 
     @SuppressWarnings("Duplicates")
-    public ObservableList<StellarAsset> getAssetBalances (boolean isMainNet ) throws IOException
-    {
-        Server server = Connections.getServer ( isMainNet );
-
-        ObservableList<StellarAsset> assetBalances = FXCollections.observableArrayList();
-        AccountResponse.Balance[] balances = server.accounts().account(pair).getBalances();
-
-        for ( AccountResponse.Balance balance : balances )
-        {
-            if ( !balance.getAssetType().equalsIgnoreCase("native") )
-            {
-                String assetName;
-                if ( balance.getAssetType().equalsIgnoreCase("native") )
-                    assetName = "XLM";
-                else
-                    assetName = balance.getAssetCode();
-
-                assetBalances.add( new StellarAsset (
-                        assetName, balance.getBalance() ) );
-            }
-        }
-        return assetBalances;
-    }
-
-    @SuppressWarnings("Duplicates")
-    public ObservableList<StellarAsset> getAllAssetBalances ( boolean isMainNet ) throws IOException
-    {
-        Server server = Connections.getServer ( isMainNet );
-
-        ObservableList<StellarAsset> assetBalances = FXCollections.observableArrayList();
-        AccountResponse.Balance balances[] = server.accounts().account( pair ).getBalances();
-
-        for ( AccountResponse.Balance balance : balances )
-        {
-            String assetName;
-            if ( balance.getAssetType().equalsIgnoreCase("native") )
-                assetName = "XLM";
-            else
-                assetName = balance.getAssetCode();
-
-            assetBalances.add( new StellarAsset (
-                    assetName, balance.getBalance() ) );
-        }
-        return assetBalances;
-    }
-
-    @SuppressWarnings("Duplicates")
     public StellarAsset[] getAllAssetBalancesArr ( boolean isMainNet ) throws IOException
     {
         Server server = Connections.getServer ( isMainNet );
@@ -153,46 +107,32 @@ public class AccountDetails
     }
 
     @SuppressWarnings("Duplicates")
-    public ObservableList<String> getAvailableAssets (boolean isMainNet ) throws IOException
+    public Pair<String, ArrayList<Transactions>> getReceivedTransactions (KeyPair keypair, String oldPagingToken, boolean isMainNet ) throws IOException
     {
+        String newPagingToken = null;
         Server server = Connections.getServer ( isMainNet );
 
-        ObservableList<String> assets = FXCollections.observableArrayList();
-        AccountResponse.Balance[] balances = server.accounts().account(pair).getBalances();
-
-        for ( AccountResponse.Balance balance : balances )
-        {
-            String assetName;
-            if ( balance.getAssetType().equalsIgnoreCase("native") )
-                assetName = "XLM";
-            else
-                assetName = balance.getAssetCode();
-            assets.add( assetName );
-        }
-        return assets;
-    }
-
-    @SuppressWarnings("Duplicates")
-    public ObservableList<Transactions> getTransactions ( boolean isMainNet ) throws IOException {
-        Server server = Connections.getServer ( isMainNet );
-        PaymentsRequestBuilder paymentsRequest = server.payments().forAccount( pair ).limit(100);
-        ObservableList<Transactions> transactions = FXCollections.observableArrayList();
+        // Get up to 100 tx's for the current account
+        PaymentsRequestBuilder paymentsRequest = server.payments().forAccount( keypair ).limit(100);
+        ArrayList<Transactions> transactions = new ArrayList<>();
         Page<OperationResponse> page = paymentsRequest.execute();
 
-        String lastToken = loadLastPagingToken();
-        if (lastToken != null) {
-            paymentsRequest.cursor(lastToken);
+        // if our paging token is null, position the cursor at the begining for oldest TX's
+        // If not null, set the cursor at the location from the pagingToken
+        if (oldPagingToken != null) {
+            paymentsRequest.cursor(oldPagingToken);
         }
 
         for ( OperationResponse response : page.getRecords() )
         {
-            savePagingToken( response.getPagingToken() );
+            // Update the paging token for our return
+            newPagingToken = response.getPagingToken();
 
             // The payments stream includes both sent and received payments. We only
             // want to process received payments here.
             if ( response instanceof PaymentOperationResponse )
             {
-                if ( !( ( PaymentOperationResponse ) response ).getFrom().getAccountId().equalsIgnoreCase ( pair.getAccountId() ) )
+                if ( !( ( PaymentOperationResponse ) response ).getFrom().getAccountId().equalsIgnoreCase ( keypair.getAccountId() ) )
                 {
                     String amount = ( ( PaymentOperationResponse ) response ).getAmount();
                     String asset = Resolve.assetName( ( ( PaymentOperationResponse ) response ).getAsset() );
@@ -222,7 +162,7 @@ public class AccountDetails
             }
 
         }
-        return transactions;
+        return new Pair<>(newPagingToken, transactions);
     }
 
     @SuppressWarnings("Duplicates")
@@ -230,8 +170,6 @@ public class AccountDetails
         Server server = Connections.getServer(isMainNet);
         ObservableList<Transactions> transactions = FXCollections.observableArrayList();
         ArrayList<TransactionResponse> transactionResponses = server.transactions().forAccount(pair).limit(100).execute().getRecords();
-
-//        lunHelpLogger.debug("{}", transactionResponses.size());
 
         for (TransactionResponse response : transactionResponses) {
             byte[] bytes = Base64.getDecoder().decode(response.getEnvelopeXdr());
@@ -251,7 +189,6 @@ public class AccountDetails
                     String addr;
                     boolean isPayment;
 
-                    //lunHelpLogger.debug( response.getEnvelopeXdr() );
 
                     /* determine if we sent or recieved this payment */
                     if (!pair.getAccountId().equalsIgnoreCase(srcKey.getAccountId()) && pair.getAccountId().equalsIgnoreCase(destKey.getAccountId())) {
@@ -259,23 +196,19 @@ public class AccountDetails
                             //this means the current account is RECEIVING the payment
                             isPayment = false;
                             addr = srcKey.getAccountId();
-//                            lunHelpLogger.debug("Recieved from\t{}", srcKey.getAccountId());
 
                         } else {
                             isPayment = true;
                             addr = destKey.getAccountId();
                             amount = Format.sentPayment(amount);
-//                            lunHelpLogger.debug("Sent to\t{}", destKey.getAccountId());
 
                         }
                     } else {
                         isPayment = false;
                         addr = "Sent to self";
-//                        lunHelpLogger.debug("Sent to self: My Account {}\tTo/From {}", pair.getAccountId(), destKey.getAccountId());
 
                     }
 
-//                    lunHelpLogger.debug("{}\t{}", coin, Format.parseAmountString(amount));
                     transactions.add(new Transactions(
                             coin
                             , amount

@@ -32,7 +32,6 @@ import org.stellar.sdk.Server;
 
 public class AllowTrust
 {
-//    private final static Logger lunHelpLogger = LoggerFactory.getLogger("lh_logger");
 
     public AllowTrust () { }
 

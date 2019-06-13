@@ -24,8 +24,6 @@
 
 package com.triippztech.queries;
 
-//import org.slf4j.Logger;
-//import org.slf4j.LoggerFactory;
 import org.stellar.sdk.KeyPair;
 
 import java.io.IOException;
@@ -36,7 +34,6 @@ import java.util.Scanner;
 
 public class CreateAccount
 {
-//    private final static Logger lunHelpLogger = LoggerFactory.getLogger("lh_logger");
 
     public CreateAccount() { }
 
@@ -46,10 +43,7 @@ public class CreateAccount
      */
     public KeyPair createKeyPair ( )
     {
-        KeyPair pair = KeyPair.random();
-
-//        lunHelpLogger.info( "New key-pair created:\nAccount ID: {}", pair.getAccountId() );
-        return pair;
+        return KeyPair.random();
     }
 
     /**
@@ -57,15 +51,13 @@ public class CreateAccount
      * @param pair the created keypair
      * @return body response from the HTTP request
      */
-    public String createTestAccount (KeyPair pair ) throws IOException {
+    public String createTestAccount ( KeyPair pair ) throws IOException {
         String friendbotUrl = String.format(
                 "https://friendbot.stellar.org/?addr=%s",
                 pair.getAccountId());
         InputStream response = new URL(friendbotUrl).openStream();
-        String body = new Scanner(response, StandardCharsets.UTF_8).useDelimiter("\\A").next();
 
-//        lunHelpLogger.info("New Account created:\n {}", body );
-        return body;
+        return new Scanner(response, StandardCharsets.UTF_8).useDelimiter("\\A").next();
     }
 
 

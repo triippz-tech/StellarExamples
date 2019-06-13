@@ -33,7 +33,6 @@ import java.io.IOException;
 
 public class Payment
 {
-//    private final static Logger lunHelpLogger = LoggerFactory.getLogger("lh_logger");
     public static String myToken = null;
     private KeyPair pair;
 
@@ -43,7 +42,7 @@ public class Payment
     }
 
     public SubmitTransactionResponse sendPayment (boolean isMainNet, KeyPair srcPair,
-                                                  String destination, String ammount,
+                                                  String destination, String amount,
                                                   String memo) throws IOException
     {
         Server server = Connections.getServer ( isMainNet );
@@ -58,7 +57,9 @@ public class Payment
         AccountResponse sourceAccount = server.accounts().account ( srcPair );
 
         /* build the tx */
-        Transaction transaction = buildNativeTransaction ( sourceAccount, destPair, ammount, memo );
+        Transaction transaction = buildNativeTransaction ( sourceAccount, destPair, amount, memo );
+
+        // Sign it
         transaction.sign(srcPair);
 
         /* send it off to the network */
@@ -66,11 +67,11 @@ public class Payment
 
     }
 
-
     private Transaction buildNativeTransaction (AccountResponse sourceAccount, KeyPair destPair, String ammount, String memo )
     {
         return  new Transaction.Builder ( sourceAccount )
                 .addOperation ( new PaymentOperation.Builder(destPair, new AssetTypeNative (), ammount ).build() )
+
                 // A memo allows you to add your own metadata to a transaction. It's
                 // optional and does not affect how Stellar treats the transaction.
                 .addMemo ( Memo.text ( memo ) )
@@ -78,10 +79,7 @@ public class Payment
     }
 
     private SubmitTransactionResponse sendTransaction ( Transaction transaction, Server server ) throws IOException {
-        SubmitTransactionResponse response = server.submitTransaction(transaction);
-
-//        lunHelpLogger.info("Successfully sent transaction to Stellar network");
-        return response;
+        return server.submitTransaction(transaction);
     }
 
 
